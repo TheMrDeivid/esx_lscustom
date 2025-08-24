@@ -1,5 +1,6 @@
 Config                   = {}
-Config.DrawDistance      = 100.0
+Config.MarkerDrawDistance = 30.0       -- distância para desenhar o marker
+Config.MarkerInteractionDistance = 4.0 -- distância para interagir
 Config.Locale            = 'br'
 Config.IsMechanicJobOnly = false
 Config.MarkerSize = {x = 1.2, y = 1.5, z = 1.1}
