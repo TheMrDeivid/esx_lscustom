@@ -1,6 +1,10 @@
 # esx_lscustom
+I do not take credit for this scrpit, I just Modified alot.
+
+Super easy to use but complete los santos customs, it detects if the car is damaged or not before opening the main menu.
 
 ## Requirements
+- es_extended
 - [esx_vehicleshop](https://github.com/ESX-Org/esx_vehicleshop)
 
 ## Download & Installation
@@ -24,7 +28,7 @@ git clone https://github.com/ESX-Org/esx_lscustom [esx]/esx_lscustom
 - Add this to your `server.cfg`:
 
 ```
-start esx_lscustom
+ensure esx_lscustom
 ```
 
 # Legal
