@@ -160,13 +160,7 @@ function UpdateMods(data)
 		ESX.Game.SetVehicleProperties(vehicle, props)
 	end
 end
---[[
-local myveh = {}
 
-function myveh.repair()
-	SetVehicleFixed(myveh.vehicle)
-end
---]]
 function GetAction(data)
 	local elements  = {}
 	local menuName  = ''
@@ -176,12 +170,7 @@ function GetAction(data)
 	local playerPed = PlayerPedId()
 	local vehicle = GetVehiclePedIsIn(playerPed, false)
 	local currentMods = ESX.Game.GetVehicleProperties(vehicle)
-	--[[
-	local maxvehhp = 1000
-	local damage = 0
-	damage = (maxvehhp - GetVehicleBodyHealth(veh))/100
-	--LSCMenu:addPurchase("Repair vehicle",round(250+150*damage,0), "Full body repair and engine service.")
-	--]]
+
 	if data.value == 'modSpeakers' or
 		data.value == 'modTrunk' or
 		data.value == 'modHydrolic' or
@@ -199,14 +188,7 @@ function GetAction(data)
 	else
 		SetVehicleDoorsShut(vehicle, false)
 	end
---[[
-	if data.value == 'repair' then
-		price = math.floor(250+150*damage,0)
-		local _label = ''
-		_label = _U('repaircar') .. ' - <span style="color:green;">$' .. price .. ' </span>'
-		table.insert(elements, {label = _label})
-	end
---]]
+
 	local vehiclePrice = 50000
 
 	for i=1, #Vehicles, 1 do
@@ -391,6 +373,49 @@ function GetAction(data)
 	OpenLSMenu(elements, menuName, menuTitle, parent)
 end
 
+-- =====================
+-- Menu de reparação obrigatório
+-- =====================
+function OpenRepairMenu(vehicle, engineHealth, bodyHealth)
+	local damageMultiplier = 1 - (math.min(engineHealth, bodyHealth) / 1000)
+	local basePrice = 500
+	local repairPrice = math.floor(basePrice + (basePrice * damageMultiplier))
+
+	local elements = {
+		{label = "Reparar carro (custa $" .. repairPrice .. ")", value = "repair"},
+		{label = "Cancelar", value = "cancel"}
+	}
+
+	ESX.UI.Menu.CloseAll()
+	ESX.UI.Menu.Open('default', GetCurrentResourceName(), 'repair_menu', {
+		title    = "Carro Danificado",
+		align    = 'top-left',
+		elements = elements
+	}, function(data, menu)
+		if data.current.value == 'repair' then
+			ESX.TriggerServerCallback('esx_lscustom:payForRepair', function(success)
+				if success then
+					SetVehicleFixed(vehicle)
+					SetVehicleDeformationFixed(vehicle)
+					SetVehicleUndriveable(vehicle, false)
+					ESX.ShowNotification("~g~Carro reparado com sucesso!")
+					menu.close()
+					GetAction({value = 'main'})
+				else
+					ESX.ShowNotification("~r~Não tens dinheiro suficiente! Precisas de reparar o carro para modificar.")
+					menu.close()
+				end
+			end, repairPrice) -- <-- aqui fecha o callback com apenas um parêntese extra, correto
+		else
+			ESX.ShowNotification("Precisas de reparar o carro para modificar!")
+			menu.close()
+		end
+	end, function(data, menu)
+		menu.close()
+		ESX.ShowNotification("Precisas de reparar o carro para modificar!")
+	end)
+end
+
 -- Blips
 Citizen.CreateThread(function()
 	for k,v in pairs(Config.Zones) do
@@ -406,98 +431,89 @@ Citizen.CreateThread(function()
 	end
 end)
 
--- R A I N B O W --
+--========================--
+--  Rainbow Marker Logic  --
+--========================--
 rainbows = true
+local r, g, b = 0, 255, 255
 
 function RGBRainbow(frequency)
-    local curtime = GetGameTimer() / 1000
-
-    r = math.floor(math.sin(curtime * frequency + 0) * 127 + 128)
-    g = math.floor(math.sin(curtime * frequency + 2) * 127 + 128)
-    b = math.floor(math.sin(curtime * frequency + 4) * 127 + 128)
-
-    return result
+	local curtime = GetGameTimer() / 1000
+	r = math.floor(math.sin(curtime * frequency + 0) * 127 + 128)
+	g = math.floor(math.sin(curtime * frequency + 2) * 127 + 128)
+	b = math.floor(math.sin(curtime * frequency + 4) * 127 + 128)
 end
+
 Citizen.CreateThread(function()
 	while true do
 		Wait(1)
-
 		if rainbows then
-			rgb = RGBRainbow(1)
+			RGBRainbow(1)
 		end
 	end
 end)
--- R A I N B O W --
 
--- Activate menu when player is inside marker
+--========================--
+--  Marker Detection      --
+--========================--
 Citizen.CreateThread(function()
 	while true do
 		Citizen.Wait(0)
 		local playerPed = PlayerPedId()
-
 		if IsPedInAnyVehicle(playerPed, false) then
-			local coords = GetEntityCoords(PlayerPedId())
-			local currentZone, zone, lastZone
+			local coords = GetEntityCoords(playerPed)
+			isInLSMarker = false
 
-			if (PlayerData.job and PlayerData.job.name == 'mechanic') or not Config.IsMechanicJobOnly then
-				for k,v in pairs(Config.Zones) do
-					if GetDistanceBetweenCoords(coords, v.Pos.x, v.Pos.y, v.Pos.z, true) < v.Size.x and not lsMenuIsShowed then
-						DrawMarker(Config.MarkerType, v.Pos.x, v.Pos.y, v.Pos.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, r, g, b, 100, false, true, 2, true, nil, nil, false)
-						isInLSMarker  = true
-						ESX.ShowHelpNotification(v.Hint)
-						break
-					else
-						isInLSMarker  = false
-					end
-				end
-			end
+            if (PlayerData.job and PlayerData.job.name == 'mechanic') or not Config.IsMechanicJobOnly then
+                for k, v in pairs(Config.Zones) do
+                    local distance = #(coords - vector3(v.Pos.x, v.Pos.y, v.Pos.z))
 
+                    -- Mostrar marker mesmo de longe
+                    if distance < Config.MarkerDrawDistance then
+                        DrawMarker(
+                            Config.MarkerType,
+                            v.Pos.x, v.Pos.y, v.Pos.z,
+                            0.0, 0.0, 0.0,
+                            0.0, 0.0, 0.0,
+                            Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z,
+                            r, g, b, 100,
+                            false, true, 2, true, nil, nil, false
+                        )
+                    end
+
+                    -- Ativar interação apenas quando perto
+                    if distance < Config.MarkerInteractionDistance and not lsMenuIsShowed then
+                        ESX.ShowHelpNotification(v.Hint)
+                        isInLSMarker = true
+                        break -- já encontramos um marker próximo, não precisa continuar
+                    end
+                end
+            end
+			-- Ação ao pressionar E
 			if IsControlJustReleased(0, 38) and not lsMenuIsShowed and isInLSMarker then
-				if (PlayerData.job and PlayerData.job.name == 'mechanic') or not Config.IsMechanicJobOnly then
-					--[[
-					local vehicle = GetVehiclePedIsIn(playerPed, false)
-					if IsVehicleDamaged(vehicle) then
-						lsMenuIsShowed = true
+				local vehicle = GetVehiclePedIsIn(playerPed, false)
+				myCar = ESX.Game.GetVehicleProperties(vehicle)
 
-						--local vehicle = GetVehiclePedIsIn(playerPed, false)
-						FreezeEntityPosition(vehicle, true)		
-						myCar = ESX.Game.GetVehicleProperties(vehicle)
+				local engineHealth = GetVehicleEngineHealth(vehicle)
+				local bodyHealth = GetVehicleBodyHealth(vehicle)
 
-						ESX.UI.Menu.CloseAll()
-						GetAction({value = 'repairmain'})						
-					else
-						lsMenuIsShowed = true
-
-						--local vehicle = GetVehiclePedIsIn(playerPed, false)
-						FreezeEntityPosition(vehicle, true)
-
-						myCar = ESX.Game.GetVehicleProperties(vehicle)
-
-						ESX.UI.Menu.CloseAll()
-						GetAction({value = 'main'})						
-					end--]]
-					
+				if engineHealth < 1000 or bodyHealth < 1000 then
+					-- Abre menu de reparação antes do menu normal
+					OpenRepairMenu(vehicle, engineHealth, bodyHealth)
+				else
 					lsMenuIsShowed = true
-
-					local vehicle = GetVehiclePedIsIn(playerPed, false)
 					FreezeEntityPosition(vehicle, true)
-
-					myCar = ESX.Game.GetVehicleProperties(vehicle)
-
 					ESX.UI.Menu.CloseAll()
 					GetAction({value = 'main'})
-					--]]
 				end
 			end
 
 			if isInLSMarker and not hasAlreadyEnteredMarker then
 				hasAlreadyEnteredMarker = true
 			end
-
 			if not isInLSMarker and hasAlreadyEnteredMarker then
 				hasAlreadyEnteredMarker = false
 			end
-
 		end
 	end
 end)
